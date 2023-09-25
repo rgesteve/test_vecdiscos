@@ -1,18 +1,79 @@
 ﻿using System.Numerics;
+using System.Collections.Generic;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 using System.Runtime.InteropServices;
 
+using BenchmarkDotNet.Running;
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Configs;
+using BenchmarkDotNet.Environments;
+using BenchmarkDotNet.Jobs;
+
 namespace test_avx;
 
-class Program
+[Config(typeof(BenchmarkConfiguration))]
+public class Program
 {
+  // dimensionality for text-embedding-ada-002 and text-search-davinci-*-001
+  [Params(1536,12288)]
+  public int Dimensionality;
+
+  // size of the collection for RAG-like grounding
+  //[Params(10,100)]
+  [Params(50)]
+  public int DocsCollectionSize;
+
+  private float[] input; // cannot have this be a `Span` (this class is not a ref struct)
+  private List< float[] > docsCollection = new();
+
+  [GlobalSetup]
+  public void Setup()
+  {
+    input = GenerateRandom(Dimensionality).ToArray();
+    for (int i = 0; i < DocsCollectionSize; i++) {
+      docsCollection.Add(GenerateRandom(Dimensionality).ToArray());
+    }
+  }
+
+  [Benchmark]
+  public void SimilarityScalar()
+  {
+    List<float> similarities = new();
+    foreach (var doc in docsCollection) {
+      similarities.Add( CosineSimilarity(input.AsSpan(), doc.AsSpan()));
+    }
+  }
+
+  [Benchmark]
+  public void SimilarityScalarVec()
+  {
+    List<float> similarities = new();
+    foreach (var doc in docsCollection) {
+      similarities.Add( CosineSimilarityVec(input.AsSpan(), doc.AsSpan()));
+    }
+  }
+
+  [Benchmark]
+  public void SimilarityScalarVec512()
+  {
+    List<float> similarities = new();
+    foreach (var doc in docsCollection) {
+      similarities.Add( CosineSimilarityVec512(input.AsSpan(), doc.AsSpan()));
+    }
+  }
+
   static void Main(string[] args)
   {
     if (!Vector512.IsHardwareAccelerated) {
       Console.WriteLine("This machine doesn't support 512-wide registers (AVX-512), exiting!");
       Environment.Exit(1);
     }
+    BenchmarkRunner.Run<Program>();
+  }
+
+  private static void Test()
+  {
     var vec1536_a = GenerateRandom(1536);
     var vec1536_b = GenerateRandom(1536);
     Console.WriteLine($"The size of this span is: {vec1536_a.Length}");
@@ -137,6 +198,18 @@ class Program
       // Cosine Similarity of X, Y
       // Sum(X * Y) / |X| * |Y|
       return (float)(dotSum / (Math.Sqrt(lenXSum) * Math.Sqrt(lenYSum)));
+    }
+  }
+
+  private class BenchmarkConfiguration : ManualConfig
+  {
+    public BenchmarkConfiguration()
+    {
+      AddJob(Job.Default.WithRuntime(CoreRuntime.Core80)
+         .WithId("AVX512F Enabled"));
+      AddJob(Job.Default.WithRuntime(CoreRuntime.Core80)
+         .WithEnvironmentVariables(new EnvironmentVariable("DOTNET_EnableAVX512F", "0"))
+         .WithId("AVX512F Disabled"));
     }
   }
 }
