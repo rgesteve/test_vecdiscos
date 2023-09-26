@@ -19,9 +19,11 @@ public class Program
   [Params(1536,12288)]
   public int Dimensionality;
 
+#if false
   // size of the collection for RAG-like grounding
   [Params(10,50,100)]
   public int DocsCollectionSize;
+#endif
 
   private float[] input; // cannot have this be a `Span` (this class is not a ref struct)
   private float[] input2;
@@ -80,8 +82,9 @@ public class Program
 
   static void Main(string[] args)
   {
-    if (!Vector512.IsHardwareAccelerated) {
-      Console.WriteLine("This machine doesn't support 512-wide registers (AVX-512), exiting!");
+    //if (!Vector512.IsHardwareAccelerated) {
+    if (!Vector.IsHardwareAccelerated) {
+      Console.WriteLine("This machine doesn't support wide registers (AVX), exiting!");
       Environment.Exit(1);
     }
 
@@ -90,6 +93,7 @@ public class Program
 #else
     BenchmarkRunner.Run<Program>();
 #endif
+    Console.WriteLine($"The parallelization count for this implementation of Vector<t> is {Vector<float>.Count}");
   }
 
   private static void Test()
