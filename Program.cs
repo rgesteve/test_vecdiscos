@@ -20,40 +20,54 @@ public class Program
   public int Dimensionality;
 
   // size of the collection for RAG-like grounding
-  //[Params(10,100)]
-  [Params(50)]
+  [Params(10,50,100)]
   public int DocsCollectionSize;
 
   private float[] input; // cannot have this be a `Span` (this class is not a ref struct)
+  private float[] input2;
   private List< float[] > docsCollection = new();
 
   [GlobalSetup]
   public void Setup()
   {
-    input = GenerateRandom(Dimensionality).ToArray();
+    input = GenerateRandom(Dimensionality);
+#if false
     for (int i = 0; i < DocsCollectionSize; i++) {
-      docsCollection.Add(GenerateRandom(Dimensionality).ToArray());
+      docsCollection.Add(GenerateRandom(Dimensionality));
     }
+#else
+    input2 = GenerateRandom(Dimensionality);
+#endif
   }
 
   [Benchmark]
   public void SimilarityScalar()
   {
+#if false
     List<float> similarities = new();
     foreach (var doc in docsCollection) {
-      similarities.Add( CosineSimilarity(input.AsSpan(), doc.AsSpan()));
+      //similarities.Add( CosineSimilarity(input.AsSpan(), doc.AsSpan()));
+      similarities.Add( CosineSimilarity(input, doc) );
     }
+#else
+    CosineSimilarity(input, input2);
+#endif
   }
 
   [Benchmark]
   public void SimilarityScalarVec()
   {
+#if false
     List<float> similarities = new();
     foreach (var doc in docsCollection) {
-      similarities.Add( CosineSimilarityVec(input.AsSpan(), doc.AsSpan()));
+      similarities.Add( CosineSimilarityVec(input, doc) );
     }
+#else
+    CosineSimilarityVec(input, input2);
+#endif
   }
 
+#if false
   [Benchmark]
   public void SimilarityScalarVec512()
   {
@@ -62,6 +76,7 @@ public class Program
       similarities.Add( CosineSimilarityVec512(input.AsSpan(), doc.AsSpan()));
     }
   }
+#endif
 
   static void Main(string[] args)
   {
@@ -69,13 +84,19 @@ public class Program
       Console.WriteLine("This machine doesn't support 512-wide registers (AVX-512), exiting!");
       Environment.Exit(1);
     }
+
+#if false
+    Test();
+#else
     BenchmarkRunner.Run<Program>();
+#endif
   }
 
   private static void Test()
   {
-    var vec1536_a = GenerateRandom(1536);
-    var vec1536_b = GenerateRandom(1536);
+    Console.WriteLine($"The vector width for generic `Vector` of float is {Vector<float>.Count}.");
+    Span<float> vec1536_a = GenerateRandom(1536);
+    Span<float> vec1536_b = GenerateRandom(1536);
     Console.WriteLine($"The size of this span is: {vec1536_a.Length}");
     var distance = CosineSimilarity(vec1536_a, vec1536_b);
     Console.WriteLine($"The distance between this two is {distance}.");
@@ -86,14 +107,18 @@ public class Program
     Console.WriteLine("Done!");
   }
 
-  private static Span<float> GenerateRandom(int size)
+  private static float[] GenerateRandom(int size)
   {
+  #if false
     var random = new Random();
     var span = new Span<float>(new float[size]);
     for (int i = 0; i < size; i++) {
       span[i] = (float)random.NextDouble();
     }
     return span;
+  #else
+    return Enumerable.Range(0,size).Select(_ => Random.Shared.NextSingle()).ToArray();
+  #endif
   }
 
   private static float CosineSimilarity(ReadOnlySpan<float> x, ReadOnlySpan<float> y)
@@ -207,9 +232,11 @@ public class Program
     {
       AddJob(Job.Default.WithRuntime(CoreRuntime.Core80)
          .WithId("AVX512F Enabled"));
+#if false	 
       AddJob(Job.Default.WithRuntime(CoreRuntime.Core80)
          .WithEnvironmentVariables(new EnvironmentVariable("DOTNET_EnableAVX512F", "0"))
          .WithId("AVX512F Disabled"));
+#endif
     }
   }
 }
