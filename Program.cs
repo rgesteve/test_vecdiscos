@@ -1,4 +1,5 @@
 ﻿using System.Numerics;
+using System.Numerics.Tensors;
 using System.Collections.Generic;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
@@ -79,6 +80,12 @@ public class Program
     }
   }
 #endif
+
+  [Benchmark]
+  public void SimilarityFromSysNum()
+  {
+    TensorPrimitives.CosineSimilarity(input, input2);
+  }
 
   static void Main(string[] args)
   {
